@@ -1,0 +1,103 @@
+[[case]] # test filling the file system with a single file, writes < cache size, no sync
+define.LFS_CACHE_SIZE = 128
+define.LFS_BLOCK_CYCLES = 500
+code = '''
+    lfs_format(&lfs, &cfg) => 0;
+    lfs_mount(&lfs, &cfg) => 0;
+
+    strcpy(path, "test-file");
+    lfs_file_open(&lfs, &file, path,
+        LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC) => 0;
+
+    int write_len = LFS_CACHE_SIZE / 2;
+    char* b = malloc(write_len);
+
+    while (lfs_file_write(&lfs, &file, b, write_len) == write_len) {};
+
+    lfs_file_write(&lfs, &file, b, write_len) => LFS_ERR_NOSPC;
+
+    lfs_file_close(&lfs, &file) => 0;
+'''
+
+[[case]] # test filling the file system with a single file, writes < cache size, and syncs
+define.LFS_CACHE_SIZE = 128
+define.LFS_BLOCK_CYCLES = 500
+code = '''
+    lfs_format(&lfs, &cfg) => 0;
+    lfs_mount(&lfs, &cfg) => 0;
+
+    strcpy(path, "test-file");
+
+    lfs_file_open(&lfs, &file, path,
+        LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC) => 0;
+
+    int write_len = LFS_CACHE_SIZE / 2;
+    char* b = malloc(write_len);
+
+    while (lfs_file_write(&lfs, &file, b, write_len) == write_len) {
+        lfs_file_sync(&lfs, &file) => 0;
+    };
+
+    lfs_file_write(&lfs, &file, b, write_len) => LFS_ERR_NOSPC;
+
+    lfs_file_close(&lfs, &file) => 0;
+'''
+
+[[case]] # test filling the file system with a single file, writes > cache size, and constant syncs
+define.LFS_CACHE_SIZE = 128
+define.LFS_BLOCK_CYCLES = 500
+code = '''
+    lfs_format(&lfs, &cfg) => 0;
+    lfs_mount(&lfs, &cfg) => 0;
+
+    strcpy(path, "test-file");
+
+    lfs_file_open(&lfs, &file, path,
+        LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC) => 0;
+
+    int write_len = LFS_CACHE_SIZE * 2 - 1;
+    char* b = malloc(write_len);
+
+    while (lfs_file_write(&lfs, &file, b, write_len) == write_len) {
+        lfs_file_sync(&lfs, &file) => 0;
+    };
+
+    lfs_file_write(&lfs, &file, b, write_len) => LFS_ERR_NOSPC;
+
+    lfs_file_close(&lfs, &file) => 0;
+'''
+
+[[case]] # test filling the file system with a collection of files, large writes, constant syncs
+define.LFS_CACHE_SIZE = 128
+define.LFS_BLOCK_CYCLES = 500
+code = '''
+    lfs_format(&lfs, &cfg) => 0;
+    lfs_mount(&lfs, &cfg) => 0;
+
+    int index = 0;
+    bool full = false;
+
+    int write_len = LFS_BLOCK_SIZE * 2 - 1;
+    char* b = malloc(write_len);
+
+    while (!full) {
+        sprintf(path, "test%d", index);
+
+        lfs_file_open(&lfs, &file, path,
+            LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC) => 0;
+
+        if(lfs_file_write(&lfs, &file, b, write_len) != write_len) {
+            full = true;
+        }
+
+        lfs_file_close(&lfs, &file) => 0;
+
+        index ++;
+    };
+
+    lfs_file_open(&lfs, &file, path,
+            LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC) => 0;
+    lfs_file_write(&lfs, &file, b, write_len) => LFS_ERR_NOSPC;
+    lfs_file_close(&lfs, &file) => 0;
+
+'''
